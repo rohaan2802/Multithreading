@@ -1,109 +1,148 @@
-# Multithreading
+# Multithreading (PDC Assignment 1)
 
-Parallel and distributed computing coursework (PDC) implementing three performance-critical workloads in **C with POSIX threads (pthreads)**. Each task ships three progressive versions-serial baseline, multi-threaded (OS scheduling), and multi-threaded with **CPU affinity + static scheduling**-plus `gprof` profiles and counter/result artifacts.
+Three **C + POSIX threads** workloads with three versions each: **serial**, **pthreads (OS scheduling)**, and **pthreads + CPU affinity / static chunks**. Measure runtime, speedup, and efficiency; reason about cache and load-balance.
 
-**Author:** Mohammad Rohaan · **Roll:** 22I-2327 · **Section:** F
-
----
-
-## Overview
-
-This repository revisits multithreading through workloads with different compute and memory characteristics:
-
-| Task | Workload | Primary dataset |
-|------|----------|-----------------|
-| **Task 1** | Logistic-regression style inference (18 features + bias) | SUSY CSV (`supersymmetry_dataset.csv` / `SUSY.zip`) |
-| **Task 2** | Sparse matrix-vector multiplication (COO → CSR SpMV) | `webbase-1M.mtx` |
-| **Task 3** | Graph BFS (edge list → CSR adjacency) | `web-Google.txt` |
-
-For every task, compare **runtime, speedup, and efficiency** across thread counts and chunk sizes, then reason about gains/losses (cache effects, load balance, affinity).
+**Author:** Mohammad Rohaan · **Roll:** 22I-2327 · **Section:** F  
+**Course:** Parallel and Distributed Computing  
+**Allowed:** C/C++ and **Pthreads only** (no OpenMP, TBB, or `std::thread` per `Assignment1.txt`)
 
 ---
 
-## Features
+## Table of contents
 
-- **V1 (serial):** Single-threaded baseline with timing via `clock_gettime(CLOCK_MONOTONIC)`.
-- **V2 (pthreads):** Multi-threaded parallelization with default OS scheduling.
-- **V3 (affinity):** Pthreads + `pthread_setaffinity_np` / static chunk scheduling for controlled core placement.
-- **Instrumentation:** Per-version counter dumps under `results/`, Excel summaries, and `gprof_*_v3.txt` profiles.
-- **Build notes:** `Compilation_Execution Commands.txt` documents compile/run recipes and result CSV checks.
+1. [Assignment contract](#assignment-contract)
+2. [The three workloads](#the-three-workloads)
+3. [Task 1 — SUSY logistic inference](#task-1--susy-logistic-inference)
+4. [Task 2 — SpMV (COO → CSR)](#task-2--spmv-coo--csr)
+5. [Task 3 — BFS on a web graph](#task-3--bfs-on-a-web-graph)
+6. [Version matrix](#version-matrix)
+7. [Build, run, gprof](#build-run-gprof)
+8. [How to write the report](#how-to-write-the-report)
+9. [File layout](#file-layout)
 
 ---
 
-## Repository structure
+## Assignment contract
 
-```text
-Multithreading/
-├── 22I-2327_F_Task1/
-│   ├── Task1_v1.c | Task1_v2.c | Task1_v3.c
-│   ├── gprof_task1_v3.txt
-│   └── results/          # counters + task1.xlsx
-├── 22I-2327_F_Task2/
-│   ├── Task2_v1.c | Task2_v2.c | Task2_v3.c
-│   ├── webbase-1M.mtx
-│   ├── gprof_task2_v3.txt
-│   └── results/
-├── 22I-2327_F_Task3/
-│   ├── Task3_v1.c | Task3_v2.c | Task3_v3.c
-│   ├── web-Google.txt
-│   ├── gprof_task3_v3.txt
-│   └── results/
-├── Compilation_Execution Commands.txt
-├── Assignment Task 1.pdf / Assignment_1_PDC_Spring_2026.pdf
-├── SUSY.zip / web-Google.txt.gz / webbase-1M.tar.gz
-└── 22I-2327_Sec_F.pdf
+From `Assignment1.txt`:
+
+| Version | Meaning |
+|---------|---------|
+| **V1** | Single-threaded baseline |
+| **V2** | Multi-threaded; **OS** schedules threads (no affinity) |
+| **V3** | Multi-threaded + **`pthread_setaffinity_np`** and an explicit static/chunk schedule |
+
+Evaluate **runtime, speedup, efficiency** across thread counts and chunk sizes. Naming example: `ROLL-NUM-SECTION-TASK#-VERSION.EXT`. Folder zip for Classroom; **no binaries** in the official zip.
+
+Timing in the provided Task 1 serial code uses `clock_gettime(CLOCK_MONOTONIC)` converted to **milliseconds**.
+
+---
+
+## The three workloads
+
+| Task | Kernel | Dataset | Why it is different |
+|------|--------|---------|---------------------|
+| 1 | Dense logistic-style scoring (18 features + bias) | SUSY CSV (`supersymmetry_dataset.csv` / `SUSY.zip`) | Regular, compute-bound, contiguous floats |
+| 2 | Sparse matrix–vector multiply | `webbase-1M.mtx` (Matrix Market COO → CSR) | Irregular memory, CSR row chunks |
+| 3 | Graph BFS | SNAP `web-Google.txt` | Frontier-based, pointer chasing |
+
+---
+
+## Task 1 — SUSY logistic inference
+
+**Files:** `Task1_v1.c`, `Task1_v2.c`, `Task1_v3.c` (also under `22I-2327_F_Task1/` on GitHub)
+
+Serial source details:
+
+- `#define FEATS 18`
+- Fixed **bias** `-0.35` and a length-18 **weight vector** `W[]` (not learned in this file — assignment inference with given coefficients).
+- CSV: skip header, parse label then 18 floats per line (`parse_line`).
+- Label threshold: `y >= 0.5` → 1 else 0.
+- Counters: `pred_pos, tp, fp, tn, fn` for a classification-style dump after scoring every row.
+- Load strategy: count lines, allocate, fill `labels[]` and `features[N * 18]`.
+
+**V2/V3** split records into **chunks** (`<threads> <chunk_records>` on the CLI). V3 pins threads to cores.
+
+```bash
+./Task1_v1 supersymmetry_dataset.csv
+./Task1_v2 supersymmetry_dataset.csv 4 200000
+./Task1_v3 supersymmetry_dataset.csv 4 200000
+```
+
+SUSY is large — ensure RAM for the full float matrix.
+
+---
+
+## Task 2 — SpMV (COO → CSR)
+
+**Files:** `Task2_v1.c` / `v2` / `v3`  
+**Matrix:** `webbase-1M.mtx`
+
+1. Read Matrix Market **coordinate** triples.
+2. Build **CSR** (`row_ptr`, `col_idx`, `values`).
+3. Compute `y = A x` (SpMV).
+4. Parallelize over **row chunks** in V2/V3 (`<threads> <chunk_rows>`).
+
+```bash
+./Task2_v1 webbase-1M.mtx
+./Task2_v3 webbase-1M.mtx 4 1024
+```
+
+Related report-only SpMV work: sibling repo **SPMV_Optimization** (NC project PDFs + `system_architecture.txt` on an i5-5300U / 4-thread host).
+
+---
+
+## Task 3 — BFS on a web graph
+
+**Files:** `Task3_v1.c` / `v2` / `v3`  
+**Graph:** `web-Google.txt` (SNAP-style edge list)
+
+1. Build CSR adjacency.
+2. BFS from a fixed source (**node `0` in V1**).
+3. V2/V3 parallelize a level or chunked neighbor expansion (`<threads> <chunk>`).
+
+```bash
+./Task3_v1 web-Google.txt
+./Task3_v3 web-Google.txt 4 1024
 ```
 
 ---
 
-## Build / run
+## Version matrix
 
-Requires a Linux/WSL environment with `gcc`, pthread support, and (optionally) `gprof`.
+| | V1 | V2 | V3 |
+|--|----|----|-----|
+| Threads | 1 | argv | argv |
+| Scheduling | — | default OS | **affinity** + static chunks |
+| Link | `-lm` (T1/T2) | `-pthread -lm` | `-pthread -lm` |
+| Profile | optional | optional | `gprof_*_v3.txt` committed for Task 1 |
 
-### Task 1 - SUSY logistic inference
+Artifacts: `results/` counter dumps, Excel summaries, `Compilation_Execution Commands.txt`.
+
+---
+
+## Build, run, gprof
+
+Linux/WSL, `gcc`:
 
 ```bash
-cd 22I-2327_F_Task1
-mkdir -p results
-
+# Task 1
 gcc Task1_v1.c -O2 -lm -o Task1_v1
 gcc Task1_v2.c -O2 -lm -pthread -o Task1_v2
 gcc Task1_v3.c -O2 -lm -pthread -o Task1_v3
 
-./Task1_v1 supersymmetry_dataset.csv
-./Task1_v2 supersymmetry_dataset.csv <threads> <chunk_records>
-./Task1_v3 supersymmetry_dataset.csv <threads> <chunk_records>
-# e.g. ./Task1_v3 supersymmetry_dataset.csv 4 200000
-```
-
-### Task 2 - SpMV (`webbase-1M.mtx`)
-
-```bash
-cd 22I-2327_F_Task2
+# Task 2
 gcc Task2_v1.c -O2 -lm -o Task2_v1
 gcc Task2_v2.c -O2 -lm -pthread -o Task2_v2
 gcc Task2_v3.c -O2 -lm -pthread -o Task2_v3
 
-./Task2_v1 webbase-1M.mtx
-./Task2_v2 webbase-1M.mtx <threads> <chunk_rows>
-./Task2_v3 webbase-1M.mtx <threads> <chunk_rows>
-# e.g. ./Task2_v3 webbase-1M.mtx 4 1024
-```
-
-### Task 3 - BFS (`web-Google.txt`)
-
-```bash
-cd 22I-2327_F_Task3
+# Task 3
 gcc Task3_v1.c -O2 -o Task3_v1
 gcc Task3_v2.c -O2 -pthread -o Task3_v2
 gcc Task3_v3.c -O2 -pthread -o Task3_v3
-
-./Task3_v1 web-Google.txt
-./Task3_v2 web-Google.txt <threads> <chunk>
-./Task3_v3 web-Google.txt <threads> <chunk>
 ```
 
-### Profiling (example)
+Profiling example:
 
 ```bash
 gcc Task1_v3.c -O2 -pg -lm -pthread -o Task1_v3_gprof
@@ -111,29 +150,36 @@ gcc Task1_v3.c -O2 -pg -lm -pthread -o Task1_v3_gprof
 gprof ./Task1_v3_gprof gmon.out > gprof_task1_v3.txt
 ```
 
-See `Compilation_Execution Commands.txt` for the full command matrix used in experiments.
+Extract `SUSY.zip`, `webbase-1M.tar.gz`, `web-Google.txt.gz` first. Sweep threads `1 … nproc` and several chunk sizes; do **not** mix CSVs between batches.
 
 ---
 
-## Usage notes
+## How to write the report
 
-- Extract large archives (`SUSY.zip`, `webbase-1M.tar.gz`, `web-Google.txt.gz`) before running.
-- Prefer clean `results/` between experiment batches to avoid mixed CSVs.
-- Task 1 loads the full CSV into memory (labels + 18 float features); ensure enough RAM for SUSY-scale data.
-- Task 2 reads Matrix Market coordinate format, builds CSR, then runs SpMV.
-- Task 3 builds CSR adjacency from the SNAP-style edge list and BFS from a fixed source (node `0` in V1).
+For each task:
 
----
-
-## Extending
-
-- Sweep thread counts (1...N cores) and chunk sizes; plot speedup/efficiency against V1.
-- Stick to pthreads if matching the original assignment constraints (no OpenMP/TBB/`std::thread`).
-- Export `results/*.xlsx` into a shared notebook for cross-task comparison.
-- Replace hardcoded weights/bias in Task 1 with a learned model or additional datasets.
+1. Table: threads × chunk → time, speedup `T1/Tp`, efficiency `S/p`.
+2. Explain **gains** (parallel work, affinity reducing migration) and **losses** (too-small chunks, false sharing, memory bandwidth on SpMV/BFS, Hyper-V 4 logical CPUs).
+3. Attach `gprof` hot functions for V3.
+4. Keep language/library constraints explicit (pthreads only).
 
 ---
 
-## License
+## File layout
 
-Coursework repository - use and share according to your institution's academic integrity policies.
+```text
+Multithreading/
+├── Assignment1.txt
+├── Compilation_Execution Commands.txt
+├── Task1_v1.c  Task1_v3.c  gprof_task1_v3.txt  task1_v3_counters.txt
+├── Task2_v1.c  Task2_v3.c
+├── Task3_v1.c  Task3_v3.c
+└── (GitHub) 22I-2327_F_Task{1,2,3}/ + zips + PDFs
+```
+
+---
+
+## Author
+
+**Mohammad Rohaan** — 22I-2327 · Section F  
+[rohaan2802](https://github.com/rohaan2802)
