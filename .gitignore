@@ -1,0 +1,41 @@
+# Build outputs
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.so
+*.dll
+gmon.out
+*_pg
+/bin/
+/build/
+
+# Timing CSVs written on each local run (Excel workbooks and counter dumps stay)
+**/results/*.csv
+
+# Extracted datasets — regenerate with scripts/extract_datasets.sh
+datasets/*.mtx
+datasets/*.csv
+datasets/web-Google.txt
+datasets/SUSY.csv
+datasets/supersymmetry_dataset.csv
+!datasets/README.md
+
+# Release binaries uploaded by the owner as GitHub Release assets.
+# The folder README is tracked; the large files themselves are not.
+release/*
+!release/README.md
+
+# IDE / OS junk
+.vs/
+.vscode/
+*.user
+*.suo
+.idea/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~

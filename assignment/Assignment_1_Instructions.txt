@@ -1,0 +1,23 @@
+A Revision of Multithreading (Pthreads) & Performance
+
+Before diving deep into the complexities of parallel and distributed systems, it’s crucial to understand why this field is important and how it can be applied effectively. Keeping in view that you already know multi-threading, your first assignment will be an introductory exercise using multi-threading that demonstrates the power of parallelism and the benefits of multi-threading in computational tasks.
+You are assigned three problems, a little different in nature/characteristics, and you are required to implement and evaluate all three problems using three approaches (we will call them versions):
+V1: Serial Baseline Begin by implementing the task in a single-threaded manner, where the operations are executed in a straightforward, step-by-step sequence. This serves as the baseline for understanding the complexity of the task.
+V2: Multi-threaded Execution (default OS scheduling) Next, parallelize the task by utilizing multiple threads. In this version, the operating system will schedule threads across CPU cores (no manual affinity setting).
+V3: Multi-threaded Execution (User-Assigned Affinity and Scheduling) Finally, implement the task again using multiple threads, but this time manually assign each thread to a specific CPU core using pthread setaffinity np() and implement a clear scheduling strategy beyond V2.
+You will perform performance evaluation (runtime, speedup, efficiency) across multiple thread counts and dataset sizes for each of the variations and reason about the performance gain/loss and submit a report.
+
+Instructions
+Allowed languages: C/C++. Allowed parallel library: Pthreads. Submissions using anyother language or framework like OpenMP, TBB, or std::thread will not be accepted.
+For your assignment, rename all your code files according to the following format e.g. ROLL-NUM-SECTION-TASK#-VERSION.EXT (23i-0001-A-TASK1-V1.c) and so on.
+Each file that you submit must contain your name, student-id, and assignment# on top of the file in comments.
+Combine all your work in one folder. The folder must contain only code and pdf file (no binaries, no exe files etc.).
+Rename the folder as ROLL-NUM-SECTION (e.g. 23i-0001-A) and compress the folder as a zip file (e.g. 23i-0001-A.zip). Do not submit .rar file.
+All the submissions will be done on Google classroom within the deadline. Submissions other than Google classroom (e.g. email etc.) will not be accepted.
+The student is solely responsible to check the final zip files for issues like corrupt files, viruses in the file, mistakenly exe sent. If we cannot download the file from Google classroom due to any reason, it will lead to zero marks in the assignment.
+If there is a syntax error in code, zero marks will be awarded in that part of assignment.
+Displayed output should be well-formatted and well presented. Use appropriate comments and indentation in your source code.
+Understanding the assignment is part of the evaluation.
+Be prepared for viva or any other evaluation mechanism after the submission of assignment.
+Late Submission & Plagiarism policies will be applied as described in course outline.
+Tip: For timely completion of the assignment, start as early as possible.
