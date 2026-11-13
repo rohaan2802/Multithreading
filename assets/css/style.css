@@ -284,3 +284,48 @@ section h2{font-size:clamp(1.4rem,1rem + 2vw,2.6rem)}
 :root:not([data-theme="dark"]) .code-wrap{border:2px solid #3f3830}
 :root:not([data-theme="dark"]) .tree-wrap{border:2px solid #6b5e4e}
 :root:not([data-theme="dark"]) .code-wrap pre.tree{border:0}
+
+
+/* Stat boxes: the headline (e.g. Pthreads) must stay inside the card at every width */
+.stats{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:14px;
+  margin-top:40px;
+}
+@media (min-width:640px){
+  .stats{grid-template-columns:repeat(3, minmax(0,1fr));}
+}
+@media (min-width:1200px){
+  .stats{grid-template-columns:repeat(6, minmax(0,1fr));}
+}
+.stat{
+  container-type:inline-size;
+  container-name:stat;
+  min-width:0;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:6px;
+  padding:14px 16px;
+  box-sizing:border-box;
+}
+.stat b{
+  display:block;
+  font-size:clamp(1.15rem, 15cqi, 1.85rem);
+  line-height:1.2;
+  max-width:100%;
+  overflow-wrap:normal;
+  word-break:normal;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.stat span{
+  display:block;
+  font-size:clamp(0.8rem, 9cqi, 1.02rem);
+  line-height:1.35;
+  max-width:100%;
+  overflow-wrap:break-word;
+}
